@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.sp
 import com.example.projecteandroid.data.WelcomeState
 
 // View: La pantalla que muestra los datos del ViewModel.
-// No tiene lógica, solo recibe el estado y lo muestra.
 // --- VISTA PRINCIPAL (LA PANTALLA) ---
 @Composable
 fun WelcomeScreen(
@@ -39,7 +38,8 @@ fun WelcomeScreen(
     onUsernameChange: (String) -> Unit,
     onLoginClick: () -> Unit,
     onShowCreatorDialog: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPasswordChange: (String) -> Unit
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         Column(
@@ -79,13 +79,22 @@ fun WelcomeScreen(
 
             // Camp de text per a la contrasenya
             OutlinedTextField(
-                value = "", // De moment buit
-                onValueChange = { /* TODO */ },
+                value = uiState.password, // <-- CANVI
+                onValueChange = onPasswordChange, // <-- CANVI
                 label = { Text("Contrasenya") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(), // Amaga el text
                 modifier = Modifier.fillMaxWidth()
             )
+            // Mostra un missatge d'error si n'hi ha
+            if (uiState.loginError != null) {
+                Text(
+                    text = uiState.loginError,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
 
             // Botó de Login
@@ -145,7 +154,8 @@ fun WelcomeScreenPreview() {
             uiState = sampleState,
             onUsernameChange = {},
             onLoginClick = {},
-            onShowCreatorDialog = {}
+            onShowCreatorDialog = {},
+            onPasswordChange = {}
         )
     }
 }

@@ -18,17 +18,21 @@ class MainViewModel : ViewModel() {
 
     // Funció que s'executa quan l'usuari escriu al camp de text.
     fun onUsernameChange(newUsername: String) {
-        _uiState.update { currentState ->
-            currentState.copy(username = newUsername)
-        }
+        _uiState.update { it.copy(username = newUsername, loginError = null) }
+    }
+    fun onPasswordChange(newPassword: String) {
+        _uiState.update { it.copy(password = newPassword, loginError = null) }
     }
 
-    // Funció per fer el login (de moment, només mostra un missatge).
-    fun onLoginClick() {
-        val currentUser = _uiState.value.username
-        if (currentUser.isNotBlank()) {
-            println("Login intentat per l'usuari: $currentUser")
-            // Aquí anirà la lògica de navegació cap a la pantalla principal de tasques.
+    // Funció que retorna true si el login és correcte, o false si no ho és.
+    fun onLoginClick(): Boolean {
+        val currentState = _uiState.value
+        return if (currentState.username == "admin" && currentState.password == "admin") {
+            _uiState.update { it.copy(loginError = null) }
+            true // Login correcte
+        } else {
+            _uiState.update { it.copy(loginError = "Usuari o contrasenya incorrectes") }
+            false // Login incorrecte
         }
     }
 
