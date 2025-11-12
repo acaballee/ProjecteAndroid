@@ -12,8 +12,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.example.projecteandroid.presentation.MainViewModel
-import com.example.projecteandroid.ui.theme.GreetingScreen
+import com.example.projecteandroid.ui.theme.CreatorInfoDialog
 import com.example.projecteandroid.ui.theme.ProjecteANDROIDTheme
+import com.example.projecteandroid.ui.theme.WelcomeScreen
 
 
 class MainActivity : ComponentActivity() {
@@ -27,15 +28,22 @@ class MainActivity : ComponentActivity() {
             ProjecteANDROIDTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
 
-                    // 1. Observamos el estado del ViewModel.
-                    // `collectAsState` convierte el StateFlow en un State de Compose.
+                    // 1. Observem l'estat del ViewModel.
                     val uiState by viewModel.uiState.collectAsState()
 
-                    // 2. Pasamos el estado actual a nuestra pantalla Composable.
-                    GreetingScreen(
+                    // 2. Passem l'estat i les funcions del ViewModel a la nostra pantalla.
+                    WelcomeScreen(
                         uiState = uiState,
+                        onUsernameChange = viewModel::onUsernameChange, // Passem la referència a la funció
+                        onLoginClick = viewModel::onLoginClick,
+                        onShowCreatorDialog = viewModel::onShowCreatorDialog,
                         modifier = Modifier.padding(innerPadding)
                     )
+
+                    // 3. Mostrem el diàleg si l'estat ho indica.
+                    if (uiState.isCreatorDialogVisible) {
+                        CreatorInfoDialog(onDismiss = viewModel::onDismissCreatorDialog)
+                    }
                 }
             }
         }
