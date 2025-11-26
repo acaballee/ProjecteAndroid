@@ -1,48 +1,104 @@
 package com.example.projecteandroid.presentation
 
+import android.app.Application
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.example.projecteandroid.data.AppDatabase
+import com.example.projecteandroid.data.Task
+import com.example.projecteandroid.data.User
 import com.example.projecteandroid.data.WelcomeState
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
-// ViewModel: Contiene el estado de la UI y la lógica de negocio.
-class MainViewModel : ViewModel() {
+class MainViewModel(private val database: AppDatabase) : ViewModel() {
 
-    // L'estat inicial ara utilitza el nostre nou model WelcomeState.
     private val _uiState = MutableStateFlow(WelcomeState())
-    val uiState: StateFlow<WelcomeState> = _uiState.asStateFlow()
+    val uiState = _uiState.asStateFlow()
 
-    // --- Lògica de Negoci (Events de la UI) ---
+    init {
+        // Al iniciar, observar el último usuario de la base de datos
+        viewModelScope.launch {
+            database.userDao().getLastUser().collect { user ->
+                if (user != null) {
+                    _uiState.update { it.copy(username = user.username, isLoggedIn = true, currentUser = user, password = "") }
+                    observeTasks(user.id)
+                }
+            }
+        }
+    }
 
-    // Funció que s'executa quan l'usuari escriu al camp de text.
     fun onUsernameChange(newUsername: String) {
         _uiState.update { it.copy(username = newUsername, loginError = null) }
     }
+
     fun onPasswordChange(newPassword: String) {
         _uiState.update { it.copy(password = newPassword, loginError = null) }
     }
 
-    // Funció que retorna true si el login és correcte, o false si no ho és.
-    fun onLoginClick(): Boolean {
-        val currentState = _uiState.value
-        return if (currentState.username == "admin" && currentState.password == "admin") {
-            _uiState.update { it.copy(loginError = null) }
-            true // Login correcte
+    fun onLoginClick() {
+        val state = _uiState.value
+        if (state.username.isNotBlank() && state.password.isNotBlank()) {
+            viewModelScope.launch {
+                val userToSave = User(username = state.username)
+                database.userDao().insertUser(userToSave)
+            }
         } else {
-            _uiState.update { it.copy(loginError = "Usuari o contrasenya incorrectes") }
-            false // Login incorrecte
+            _uiState.update { it.copy(loginError = "El nom d'usuari i la contrasenya no poden estar buits.") }
         }
     }
 
-    // Funció per mostrar el diàleg d'informació del creador.
+    private fun observeTasks(userId: Int) {
+        viewModelScope.launch {
+            database.taskDao().getTasksForUser(userId).collectLatest { tasks ->
+                _uiState.update { it.copy(tasks = tasks) }
+            }
+        }
+    }
+
+    // --- Funcions per gestionar les tasques ---
+
+    fun addTask(title: String, subject: String, dueDate: String) {
+        val userId = _uiState.value.currentUser?.id ?: return
+        val newTask = Task(userId = userId, title = title, subject = subject, dueDate = dueDate)
+        viewModelScope.launch {
+            database.taskDao().insertTask(newTask)
+        }
+    }
+
+    fun toggleTaskCompletion(task: Task) {
+        viewModelScope.launch {
+            database.taskDao().updateTask(task.copy(isCompleted = !task.isCompleted))
+        }
+    }
+
+    fun deleteTask(task: Task) {
+        viewModelScope.launch {
+            database.taskDao().deleteTask(task)
+        }
+    }
+
+    // --- Gestió de diàlegs i altres ---
+
     fun onShowCreatorDialog() {
         _uiState.update { it.copy(isCreatorDialogVisible = true) }
     }
 
-    // Funció per amagar el diàleg.
     fun onDismissCreatorDialog() {
         _uiState.update { it.copy(isCreatorDialogVisible = false) }
+    }
+}
+
+// Factory para poder pasar el contexto de la aplicación al ViewModel
+class MainViewModelFactory(private val application: Application) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return MainViewModel(AppDatabase.getDatabase(application)) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
