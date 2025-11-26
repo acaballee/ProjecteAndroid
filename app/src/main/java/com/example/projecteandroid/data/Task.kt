@@ -18,7 +18,7 @@ import androidx.room.PrimaryKey
 data class Task(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
-    val userId: Int, // Clau forana per enllaçar amb l'usuari
+    val userId: Int, // Clau forana per enllaça amb l'usuari
     val title: String,
     val subject: String,
     val dueDate: String,

@@ -12,6 +12,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.projecteandroid.presentation.MainViewModel
 import com.example.projecteandroid.presentation.MainViewModelFactory
+import com.example.projecteandroid.presentation.NavigationEvent
 import com.example.projecteandroid.ui.theme.CreatorInfoDialog
 import com.example.projecteandroid.ui.theme.TasksScreen
 import com.example.projecteandroid.ui.theme.WelcomeScreen
@@ -24,24 +25,37 @@ fun AppNavigation() {
     )
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(uiState.isLoggedIn) {
-        if (uiState.isLoggedIn && navController.currentDestination?.route != AppScreens.TASKS_SCREEN) {
-            navController.navigate(AppScreens.TASKS_SCREEN) {
-                popUpTo(AppScreens.WELCOME_SCREEN) { inclusive = true }
+    // LaunchedEffect per escoltar els esdeveniments de navegació ---
+    LaunchedEffect(key1 = true) {
+        viewModel.navigationEvent.collect { event ->
+            when (event) {
+                is NavigationEvent.NavigateToTasks -> {
+                    navController.navigate(AppScreens.TASKS_SCREEN) {
+                        popUpTo(AppScreens.WELCOME_SCREEN) { inclusive = true }
+                    }
+                }
+                is NavigationEvent.NavigateToLogin -> {
+                    navController.navigate(AppScreens.WELCOME_SCREEN) {
+                        // Neteja la pila fins a l'inici per no tornar a la pantalla de tasques
+                        popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                    }
+                }
             }
         }
     }
 
     NavHost(
         navController = navController,
-        startDestination = AppScreens.WELCOME_SCREEN
+        // Si hi ha sessió iniciada, la pantalla d'inici és la de tasques, si no, la de benvinguda
+        startDestination = if (uiState.isLoggedIn) AppScreens.TASKS_SCREEN else AppScreens.WELCOME_SCREEN
     ) {
         composable(AppScreens.WELCOME_SCREEN) {
+            // El contingut de WelcomeScreen no canvia, però ara onLoginClick no navega directament
             WelcomeScreen(
                 uiState = uiState,
                 onUsernameChange = viewModel::onUsernameChange,
-                onPasswordChange = viewModel::onPasswordChange, // Paràmetre que faltava
-                onLoginClick = viewModel::onLoginClick,
+                onPasswordChange = viewModel::onPasswordChange,
+                onLoginClick = viewModel::onLoginClick, // Només crida la funció del ViewModel
                 onShowCreatorDialog = viewModel::onShowCreatorDialog
             )
 
@@ -51,12 +65,15 @@ fun AppNavigation() {
         }
 
         composable(AppScreens.TASKS_SCREEN) {
+            // El contingut de TasksScreen només necessita cridar a logout
             TasksScreen(
                 tasks = uiState.tasks,
-                onAddTask = { title, subject, dueDate -> viewModel.addTask(title, subject, dueDate) },
+                onAddTask = viewModel::addTask,
                 onToggleTask = viewModel::toggleTaskCompletion,
-                onDeleteTask = viewModel::deleteTask
+                onDeleteTask = viewModel::deleteTask,
+                onNavigateBack = viewModel::logout // <-- Simplificat!
             )
         }
     }
 }
+

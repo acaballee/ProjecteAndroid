@@ -1,6 +1,7 @@
 package com.example.projecteandroid.data
 
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -13,4 +14,7 @@ interface UserDao {
 
     @Query("SELECT * FROM users ORDER BY id DESC LIMIT 1")
     fun getLastUser(): Flow<User?>
+
+    @Delete
+    suspend fun deleteUser(user: User)
 }

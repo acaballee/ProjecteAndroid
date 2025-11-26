@@ -3,6 +3,8 @@ package com.example.projecteandroid.ui.theme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -11,35 +13,52 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.projecteandroid.data.Task
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TasksScreen(
     tasks: List<Task>,
     onAddTask: (title: String, subject: String, dueDate: String) -> Unit,
     onToggleTask: (Task) -> Unit,
-    onDeleteTask: (Task) -> Unit
-) {
+    onDeleteTask: (Task) -> Unit,
+    onNavigateBack: () -> Unit, // Paràmetre per a l'acció de tornar enrere
+    ) {
     var showDialog by remember { mutableStateOf(false) }
 
+    // Scaffold ens proporciona una estructura amb barra superior, contingut, etc.
     Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(onClick = { showDialog = true }) {
-                Text("+", style = MaterialTheme.typography.headlineMedium)
+        topBar = {
+            TopAppBar(
+                title = { Text("Les Meves Tasques") },
+                navigationIcon = {
+                    // La icona de la fletxa que executarà l'acció de tornar
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Tornar enrere"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary
+                )
+            )
+        }
+    ) { innerPadding ->
+        // Com que ja tenies una LazyColumn, la posem dins del Scaffold
+        // i apliquem el padding corresponent.
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding) // Important aplicar el padding per no quedar sota la barra
+        ) {
+            items(tasks) { task ->
+                // Aquí pots posar el teu Composable per a cada item de la tasca.
+                // De moment, deixo un Text simple.
+                Text(text = "Tasca: ${task.title}", modifier = Modifier.padding(all = 16.dp))
             }
         }
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding).padding(16.dp)) {
-            Text("Les teves tasques", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(bottom = 16.dp))
-
-            if (tasks.isEmpty()) {
-                Text("Encara no tens cap tasca. Afegeix-ne una!")
-            }
-
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(tasks) { task ->
-                    TaskItem(task, onToggleTask, onDeleteTask)
-                }
-            }
-        }
+    }
 
         if (showDialog) {
             AddTaskDialog(
@@ -51,7 +70,6 @@ fun TasksScreen(
             )
         }
     }
-}
 
 @Composable
 fun TaskItem(task: Task, onToggle: (Task) -> Unit, onDelete: (Task) -> Unit) {

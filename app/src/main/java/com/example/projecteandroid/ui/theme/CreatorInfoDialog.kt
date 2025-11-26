@@ -10,7 +10,7 @@ fun CreatorInfoDialog(onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(text = "Sobre el creador") },
-        text = { Text(text = "Aquesta aplicació ha estat creada per Àlex.") },
+        text = { Text(text = "Aquesta aplicació ha estat creada per Àlex i Pau.") },
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text("Tancar")
