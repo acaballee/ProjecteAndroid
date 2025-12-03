@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.projecteandroid.presentation.NavigationEvent
 import com.example.projecteandroid.data.AppDatabase
 import com.example.projecteandroid.data.Task
+import com.example.projecteandroid.data.TaskStatus
 import com.example.projecteandroid.data.User
 import com.example.projecteandroid.data.WelcomeState
 import kotlinx.coroutines.channels.Channel
@@ -48,6 +49,7 @@ class MainViewModel(private val database: AppDatabase) : ViewModel() {
         _uiState.update { it.copy(password = newPassword, loginError = null) }
     }
 
+    // Funcio per a iniciar sessió
     fun onLoginClick() {
         viewModelScope.launch {
             val currentState = _uiState.value
@@ -70,6 +72,36 @@ class MainViewModel(private val database: AppDatabase) : ViewModel() {
         }
     }
 
+    // Funcio per a registrar un nou usuari
+    fun onRegisterClick() {
+        viewModelScope.launch {
+            val currentState = _uiState.value
+            // Validació bàsica
+            if (currentState.username.isNotBlank() && currentState.password.isNotBlank()) {
+                val existingUser = database.userDao().getUserByUsername(currentState.username)
+                if (existingUser == null) {
+                    // L'usuari no existeix, el podem crear
+                    val newUser = User(username = currentState.username, password = currentState.password)
+                    database.userDao().insertUser(newUser)
+                    // Opcional: Iniciar sessió directament després de registrar-se
+                    _uiState.update {
+                        it.copy(
+                            isLoggedIn = true,
+                            currentUser = newUser,
+                            loginError = null,
+                            password = ""
+                        )
+                    }
+                    _navigationEvent.send(NavigationEvent.NavigateToTasks)
+                } else {
+                    _uiState.update { it.copy(loginError = "El nom d'usuari ja existeix") }
+                }
+            } else {
+                _uiState.update { it.copy(loginError = "El nom d'usuari i la contrasenya no poden estar buits") }
+            }
+        }
+    }
+
     private fun observeTasks(userId: Int) {
         viewModelScope.launch {
             database.taskDao().getTasksForUser(userId).collectLatest { tasks ->
@@ -81,16 +113,33 @@ class MainViewModel(private val database: AppDatabase) : ViewModel() {
     // --- Funcions per gestionar les tasques ---
 
     fun addTask(title: String, subject: String, dueDate: String) {
-        val userId = _uiState.value.currentUser?.id ?: return
-        val newTask = Task(userId = userId, title = title, subject = subject, dueDate = dueDate)
         viewModelScope.launch {
-            database.taskDao().insertTask(newTask)
+            val currentUser = _uiState.value.currentUser
+            if (currentUser != null && title.isNotBlank()) {
+                val newTask = Task(
+                    userId = currentUser.id,
+                    title = title,
+                    subject = subject,
+                    dueDate = dueDate,
+                    status = TaskStatus.PENDING // Totes les tasques noves comencen com a pendents
+                )
+                database.taskDao().insertTask(newTask)
+            }
         }
     }
 
-    fun toggleTaskCompletion(task: Task) {
+    // NOVA funció per actualitzar una tasca existent (per editar)
+    fun updateTask(task: Task) {
         viewModelScope.launch {
-            database.taskDao().updateTask(task.copy(isCompleted = !task.isCompleted))
+            database.taskDao().updateTask(task)
+        }
+    }
+
+    // NOVA funció per canviar l'estat d'una tasca
+    fun moveTask(task: Task, newStatus: TaskStatus) {
+        viewModelScope.launch {
+            val updatedTask = task.copy(status = newStatus)
+            database.taskDao().updateTask(updatedTask)
         }
     }
 
@@ -100,15 +149,6 @@ class MainViewModel(private val database: AppDatabase) : ViewModel() {
         }
     }
 
-    // --- Gestió de diàlegs i altres ---
-
-    fun onShowCreatorDialog() {
-        _uiState.update { it.copy(isCreatorDialogVisible = true) }
-    }
-
-    fun onDismissCreatorDialog() {
-        _uiState.update { it.copy(isCreatorDialogVisible = false) }
-    }
 
     // Dins de la classe MainViewModel
     fun logout() {

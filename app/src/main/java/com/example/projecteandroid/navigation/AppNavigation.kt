@@ -56,12 +56,9 @@ fun AppNavigation() {
                 onUsernameChange = viewModel::onUsernameChange,
                 onPasswordChange = viewModel::onPasswordChange,
                 onLoginClick = viewModel::onLoginClick, // Només crida la funció del ViewModel
-                onShowCreatorDialog = viewModel::onShowCreatorDialog
+                onRegisterClick = viewModel::onRegisterClick,
+                onShowCreatorDialog = {} // Actualitzat
             )
-
-            if (uiState.isCreatorDialogVisible) {
-                CreatorInfoDialog(onDismiss = viewModel::onDismissCreatorDialog)
-            }
         }
 
         composable(AppScreens.TASKS_SCREEN) {
@@ -69,7 +66,8 @@ fun AppNavigation() {
             TasksScreen(
                 tasks = uiState.tasks,
                 onAddTask = viewModel::addTask,
-                onToggleTask = viewModel::toggleTaskCompletion,
+                onUpdateTask = viewModel::updateTask,
+                onMoveTask = viewModel::moveTask,
                 onDeleteTask = viewModel::deleteTask,
                 onNavigateBack = viewModel::logout // <-- Simplificat!
             )
