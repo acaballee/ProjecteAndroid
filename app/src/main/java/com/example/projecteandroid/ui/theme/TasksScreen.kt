@@ -23,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,6 +34,10 @@ import com.example.projecteandroid.data.TaskStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.positionInRoot
+
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -121,8 +127,10 @@ fun KanbanBoard(
     onDeleteClick: (Task) -> Unit
 ) {
     var draggedTask by remember { mutableStateOf<Task?>(null) }
-    // Guardem l'offset en píxels (Offset)
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
+
+    // MAPA per guardar on està cada columna a la pantalla
+    val columnAreas = remember { mutableStateMapOf<TaskStatus, Rect>() }
 
     Box(modifier = modifier.fillMaxSize()) {
         Row(
@@ -131,24 +139,40 @@ fun KanbanBoard(
                 .padding(8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Definim una funció comuna per quan s'arrossega
-            val onDragStartAction: (Task, Offset) -> Unit = { task, offset ->
+            // NOU: Ara acceptem la 'startPosition' (coordenades globals de la targeta)
+            val onDragStartAction: (Task, Offset) -> Unit = { task, startPosition ->
                 draggedTask = task
-                dragOffset = offset
+                // NOU: En lloc de començar a 0, comencem on està la targeta realment
+                dragOffset = startPosition
             }
 
-            // Definim una funció per actualitzar la posició mentre movem el dit
             val onDragAction: (Offset) -> Unit = { delta ->
                 dragOffset += delta
             }
 
-            // Definim què passa quan soltem (aquí hauries de calcular on cau)
             val onDragEndAction: () -> Unit = {
+                draggedTask?.let { task ->
+                    val startRegion = columnAreas[task.status]
+                    if (startRegion != null) {
+                        // NOU: El càlcul ara és més directe perquè dragOffset ja té la posició real
+                        // El centre de la fitxa arrossegada és dragOffset + meitat de l'amplada (aprox)
+                        // Per simplificar, mirem la cantonada superior esquerra del drop
+                        val dropX = dragOffset.x + 50 // Sumem una mica per centrar la detecció
+
+                        val targetStatus = columnAreas.entries.firstOrNull { (_, rect) ->
+                            dropX >= rect.left && dropX <= rect.right
+                        }?.key
+
+                        if (targetStatus != null && targetStatus != task.status) {
+                            onMoveTask(task, targetStatus)
+                        }
+                    }
+                }
                 draggedTask = null
-                // Aquí és on hauries de comprovar coordenades per fer el onMoveTask realment
+                dragOffset = Offset.Zero
             }
 
-            // Columnes del tauler Kanban
+            // Columnes
             TaskColumn(
                 status = TaskStatus.PENDING,
                 tasks = pendingTasks,
@@ -158,7 +182,8 @@ fun KanbanBoard(
                 onDeleteClick = onDeleteClick,
                 onDragStart = onDragStartAction,
                 onDrag = onDragAction,
-                onDragEnd = onDragEndAction
+                onDragEnd = onDragEndAction,
+                onColumnPositioned = { rect -> columnAreas[TaskStatus.PENDING] = rect }
             )
             TaskColumn(
                 status = TaskStatus.IN_PROGRESS,
@@ -169,7 +194,8 @@ fun KanbanBoard(
                 onDeleteClick = onDeleteClick,
                 onDragStart = onDragStartAction,
                 onDrag = onDragAction,
-                onDragEnd = onDragEndAction
+                onDragEnd = onDragEndAction,
+                onColumnPositioned = { rect -> columnAreas[TaskStatus.IN_PROGRESS] = rect }
             )
             TaskColumn(
                 status = TaskStatus.COMPLETED,
@@ -180,17 +206,27 @@ fun KanbanBoard(
                 onDeleteClick = onDeleteClick,
                 onDragStart = onDragStartAction,
                 onDrag = onDragAction,
-                onDragEnd = onDragEndAction
+                onDragEnd = onDragEndAction,
+                onColumnPositioned = { rect -> columnAreas[TaskStatus.COMPLETED] = rect }
             )
         }
 
-        // Dibuixem la tasca que s'està arrossegant
+        // VISUALITZACIÓ DE L'ARROSSEGAMENT
         draggedTask?.let { task ->
-            // Utilitzem un modificador especial per moure elements amb Offset en píxels
             Box(modifier = Modifier.offset {
                 androidx.compose.ui.unit.IntOffset(dragOffset.x.toInt(), dragOffset.y.toInt())
             }) {
-                TaskCard(task = task, onEditClick = {}, onDeleteClick = {})
+                Card(
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+                    modifier = Modifier.fillMaxWidth(0.33f) // Mantenim la mida reduïda que volies
+                ) {
+                    TaskCard(
+                        task = task,
+                        onEditClick = {},
+                        onDeleteClick = {},
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         }
     }
@@ -205,22 +241,23 @@ fun TaskColumn(
     onEditClick: (Task) -> Unit,
     onDeleteClick: (Task) -> Unit,
     onDragStart: (Task, Offset) -> Unit,
-    onDrag: (Offset) -> Unit,       // <--- NOU: Necessari per actualitzar posició
-    onDragEnd: () -> Unit           // <--- NOU: Necessari per saber quan soltem
+    onDrag: (Offset) -> Unit,
+    onDragEnd: () -> Unit,
+    onColumnPositioned: (Rect) -> Unit
 ) {
     Column(
         modifier = modifier
             .fillMaxHeight()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .onGloballyPositioned { coordinates ->
+                onColumnPositioned(coordinates.boundsInWindow())
+            }
             .padding(8.dp)
-            // Error 1 arreglat: Afegim onDrag (encara que estigui buit aquí, és obligatori)
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDrag = { change, _ -> change.consume() },
-                    onDragEnd = {
-                        // Lògica per detectar drop a la columna (complexa, la deixem buida de moment)
-                    }
+                    onDragEnd = { }
                 )
             },
         horizontalAlignment = Alignment.CenterHorizontally
@@ -236,25 +273,33 @@ fun TaskColumn(
             modifier = Modifier.fillMaxWidth()
         ) {
             items(tasks, key = { it.id }) { task ->
+                // NOU: Variable per guardar la posició d'AQUESTA targeta concreta
+                var itemPosition by remember { mutableStateOf(Offset.Zero) }
+
                 TaskCard(
                     task = task,
                     onEditClick = onEditClick,
                     onDeleteClick = onDeleteClick,
-                    modifier = Modifier.pointerInput(task) {
-                        // Error 2 arreglat: Implementem onDrag i passem les dades amunt
-                        detectDragGestures(
-                            onDragStart = { offset ->
-                                onDragStart(task, offset)
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                onDrag(dragAmount) // Passem el moviment al pare
-                            },
-                            onDragEnd = {
-                                onDragEnd()
-                            }
-                        )
-                    }
+                    modifier = Modifier
+                        // NOU: Detectem on està la targeta a la pantalla
+                        .onGloballyPositioned { coordinates ->
+                            itemPosition = coordinates.positionInRoot()
+                        }
+                        .pointerInput(task) {
+                            detectDragGestures(
+                                onDragStart = { _ ->
+                                    // NOU: Passem la posició global (itemPosition) en lloc de l'offset local
+                                    onDragStart(task, itemPosition)
+                                },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    onDrag(dragAmount)
+                                },
+                                onDragEnd = {
+                                    onDragEnd()
+                                }
+                            )
+                        }
                 )
             }
         }
