@@ -8,4 +8,10 @@ class Converters {
 
     @TypeConverter
     fun toTaskStatus(status: String): TaskStatus = TaskStatus.valueOf(status)
+
+    @TypeConverter
+    fun fromTaskPriority(priority: TaskPriority): String = priority.name
+
+    @TypeConverter
+    fun toTaskPriority(priority: String): TaskPriority = TaskPriority.valueOf(priority)
 }

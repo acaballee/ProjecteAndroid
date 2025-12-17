@@ -10,4 +10,5 @@ data class WelcomeState (
     val currentUser: User? = null,
     val tasks: List<Task> = emptyList(),
     val loginError: String? = null, // Camp per al missatge d'error
+    val isDarkTheme: Boolean = false // Estat del tema (clar/fosc)
 )

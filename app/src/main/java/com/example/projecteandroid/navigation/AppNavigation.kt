@@ -18,12 +18,12 @@ import com.example.projecteandroid.ui.theme.TasksScreen
 import com.example.projecteandroid.ui.theme.WelcomeScreen
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    viewModel: MainViewModel,
+    uiState: com.example.projecteandroid.data.WelcomeState
+) {
     val navController = rememberNavController()
-    val viewModel: MainViewModel = viewModel(
-        factory = MainViewModelFactory(LocalContext.current.applicationContext as Application)
-    )
-    val uiState by viewModel.uiState.collectAsState()
+    // viewModel i uiState venen de fora per compartir l'estat del tema
 
     // LaunchedEffect per escoltar els esdeveniments de navegació ---
     LaunchedEffect(key1 = true) {
@@ -65,11 +65,14 @@ fun AppNavigation() {
             // El contingut de TasksScreen només necessita cridar a logout
             TasksScreen(
                 tasks = uiState.tasks,
+                username = uiState.username, // Passem l'usuari
+                isDarkTheme = uiState.isDarkTheme, // Passem l'estat del tema
+                onThemeChange = viewModel::toggleTheme, // Passem la funció de canvi de tema
                 onAddTask = viewModel::addTask,
                 onUpdateTask = viewModel::updateTask,
                 onMoveTask = viewModel::moveTask,
                 onDeleteTask = viewModel::deleteTask,
-                onNavigateBack = viewModel::logout // <-- Simplificat!
+                onLogout = viewModel::logout // <-- Canviat de onNavigateBack a onLogout per claredat
             )
         }
     }

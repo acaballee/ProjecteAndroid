@@ -22,7 +22,8 @@ data class Task(
     val title: String,
     val subject: String,
     val dueDate: String,
-    val status: TaskStatus = TaskStatus.PENDING
+    val status: TaskStatus = TaskStatus.PENDING,
+    val priority: TaskPriority = TaskPriority.MEDIUM
 )
 
 

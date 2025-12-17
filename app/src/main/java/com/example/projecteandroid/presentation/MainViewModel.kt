@@ -8,6 +8,7 @@ import com.example.projecteandroid.presentation.NavigationEvent
 import com.example.projecteandroid.data.AppDatabase
 import com.example.projecteandroid.data.Task
 import com.example.projecteandroid.data.TaskStatus
+import com.example.projecteandroid.data.TaskPriority
 import com.example.projecteandroid.data.User
 import com.example.projecteandroid.data.WelcomeState
 import kotlinx.coroutines.channels.Channel
@@ -138,7 +139,7 @@ class MainViewModel(private val database: AppDatabase) : ViewModel() {
 
     // --- Funcions per gestionar les tasques ---
 
-    fun addTask(title: String, subject: String, dueDate: String) {
+    fun addTask(title: String, subject: String, dueDate: String, priority: TaskPriority) {
         viewModelScope.launch {
             val currentUser = _uiState.value.currentUser
             if (currentUser != null && title.isNotBlank()) {
@@ -147,7 +148,8 @@ class MainViewModel(private val database: AppDatabase) : ViewModel() {
                     title = title,
                     subject = subject,
                     dueDate = dueDate,
-                    status = TaskStatus.PENDING // Totes les tasques noves comencen com a pendents
+                    status = TaskStatus.PENDING, // Totes les tasques noves comencen com a pendents
+                    priority = priority
                 )
                 database.taskDao().insertTask(newTask)
             }
@@ -192,6 +194,10 @@ class MainViewModel(private val database: AppDatabase) : ViewModel() {
             // Enviem un esdeveniment per tornar al login ---
             _navigationEvent.send(NavigationEvent.NavigateToLogin)
         }
+    }
+
+    fun toggleTheme() {
+        _uiState.update { it.copy(isDarkTheme = !it.isDarkTheme) }
     }
 }
 

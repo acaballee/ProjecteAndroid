@@ -1,6 +1,7 @@
 package com.example.projecteandroid.ui.theme
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -14,6 +15,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
@@ -36,6 +39,11 @@ import java.util.Date
 import java.util.Locale
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.positionInRoot
+import com.example.projecteandroid.data.TaskPriority
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.ColorUtils
+import kotlin.math.absoluteValue
 
 
 
@@ -43,14 +51,18 @@ import androidx.compose.ui.layout.positionInRoot
 @Composable
 fun TasksScreen(
     tasks: List<Task>,
-    onAddTask: (title: String, subject: String, dueDate: String) -> Unit,
+    username: String,
+    isDarkTheme: Boolean,
+    onThemeChange: () -> Unit,
+    onAddTask: (title: String, subject: String, dueDate: String, priority: TaskPriority) -> Unit,
     onUpdateTask: (Task) -> Unit,
     onMoveTask: (Task, TaskStatus) -> Unit,
     onDeleteTask: (Task) -> Unit,
-    onNavigateBack: () -> Unit,
+    onLogout: () -> Unit,
 ) {
     // Estat per controlar la visibilitat del diàleg i la tasca que s'està editant/creant
     var showDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
     var taskToEdit by remember { mutableStateOf<Task?>(null) }
 
     Scaffold(
@@ -58,10 +70,10 @@ fun TasksScreen(
             TopAppBar(
                 title = { Text("Tauler de Tasques") },
                 actions = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = { showSettingsDialog = true }) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = "Tancar sessió"
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Configuració"
                         )
                     }
                 },
@@ -86,32 +98,64 @@ fun TasksScreen(
         val inProgressTasks = tasksByStatus[TaskStatus.IN_PROGRESS] ?: emptyList()
         val completedTasks = tasksByStatus[TaskStatus.COMPLETED] ?: emptyList()
 
-        KanbanBoard(
-            modifier = Modifier.padding(innerPadding),
-            pendingTasks = pendingTasks,
-            inProgressTasks = inProgressTasks,
-            completedTasks = completedTasks,
-            onMoveTask = onMoveTask,
-            onEditClick = { task ->
-                taskToEdit = task
-                showDialog = true
-            },
-            onDeleteClick = onDeleteTask
-        )
+        // Barra de progrés
+        val totalTasks = tasks.size
+        val completedCount = completedTasks.size
+        val progress = if (totalTasks > 0) completedCount.toFloat() / totalTasks else 0f
+
+        Column(modifier = Modifier.padding(innerPadding)) {
+            if (totalTasks > 0) {
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                Text(
+                    text = "${(progress * 100).toInt()}% Completat",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(end = 16.dp, bottom = 8.dp)
+                )
+            }
+
+            KanbanBoard(
+                pendingTasks = pendingTasks,
+                inProgressTasks = inProgressTasks,
+                completedTasks = completedTasks,
+                onMoveTask = onMoveTask,
+                onEditClick = { task ->
+                    taskToEdit = task
+                    showDialog = true
+                },
+                onDeleteClick = onDeleteTask
+            )
+        }
     }
 
     if (showDialog) {
         TaskDialog(
             task = taskToEdit,
             onDismiss = { showDialog = false },
-            onConfirm = { title, subject, dueDate ->
+            onConfirm = { title, subject, dueDate, priority ->
                 if (taskToEdit == null) {
-                    onAddTask(title, subject, dueDate)
+                    onAddTask(title, subject, dueDate, priority)
                 } else {
-                    onUpdateTask(taskToEdit!!.copy(title = title, subject = subject, dueDate = dueDate))
+                    onUpdateTask(taskToEdit!!.copy(title = title, subject = subject, dueDate = dueDate, priority = priority))
                 }
                 showDialog = false
             }
+        )
+    }
+    // Parametres del diàleg de ajustes
+    if (showSettingsDialog) {
+        SettingsDialog(
+            username = username,
+            isDarkTheme = isDarkTheme,
+            onThemeChange = onThemeChange,
+            onLogout = onLogout,
+            onDismiss = { showSettingsDialog = false }
         )
     }
 }
@@ -128,11 +172,17 @@ fun KanbanBoard(
 ) {
     var draggedTask by remember { mutableStateOf<Task?>(null) }
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
+    var boardPosition by remember { mutableStateOf(Offset.Zero) }
 
     // MAPA per guardar on està cada columna a la pantalla
     val columnAreas = remember { mutableStateMapOf<TaskStatus, Rect>() }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier
+        .fillMaxSize()
+        .onGloballyPositioned { coordinates ->
+            boardPosition = coordinates.boundsInWindow().topLeft
+        }
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -143,7 +193,7 @@ fun KanbanBoard(
             val onDragStartAction: (Task, Offset) -> Unit = { task, startPosition ->
                 draggedTask = task
                 // NOU: En lloc de començar a 0, comencem on està la targeta realment
-                dragOffset = startPosition
+                dragOffset = startPosition - boardPosition
             }
 
             val onDragAction: (Offset) -> Unit = { delta ->
@@ -157,7 +207,7 @@ fun KanbanBoard(
                         // NOU: El càlcul ara és més directe perquè dragOffset ja té la posició real
                         // El centre de la fitxa arrossegada és dragOffset + meitat de l'amplada (aprox)
                         // Per simplificar, mirem la cantonada superior esquerra del drop
-                        val dropX = dragOffset.x + 50 // Sumem una mica per centrar la detecció
+                        val dropX = dragOffset.x + boardPosition.x + 50 // Sumem una mica per centrar la detecció
 
                         val targetStatus = columnAreas.entries.firstOrNull { (_, rect) ->
                             dropX >= rect.left && dropX <= rect.right
@@ -319,9 +369,41 @@ fun TaskCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(task.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(task.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                // Indicador de prioritat
+                val priorityColor = when (task.priority) {
+                    TaskPriority.HIGH -> Color.Red
+                    TaskPriority.MEDIUM -> Color.Yellow
+                    TaskPriority.LOW -> Color.Green
+                }
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(priorityColor)
+                )
+            }
             Spacer(modifier = Modifier.height(4.dp))
-            Text(task.subject, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            
+            // Assignatura amb color
+            Surface(
+                color = getSubjectColor(task.subject),
+                shape = RoundedCornerShape(4.dp),
+                modifier = Modifier.padding(vertical = 4.dp)
+            ) {
+                Text(
+                    text = task.subject,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Black,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+            
             Spacer(modifier = Modifier.height(8.dp))
             Text("Límit: ${task.dueDate}", style = MaterialTheme.typography.bodySmall)
             Row(modifier = Modifier.align(Alignment.End)) {
@@ -341,11 +423,12 @@ fun TaskCard(
 fun TaskDialog(
     task: Task?,
     onDismiss: () -> Unit,
-    onConfirm: (title: String, subject: String, dueDate: String) -> Unit
+    onConfirm: (title: String, subject: String, dueDate: String, priority: TaskPriority) -> Unit
 ) {
     var title by remember { mutableStateOf(task?.title ?: "") }
     var subject by remember { mutableStateOf(task?.subject ?: "") }
     var dueDate by remember { mutableStateOf(task?.dueDate ?: "") }
+    var priority by remember { mutableStateOf(task?.priority ?: TaskPriority.MEDIUM) }
 
     // Estats per controlar el calendari
     var showDatePicker by remember { mutableStateOf(false) }
@@ -412,21 +495,52 @@ fun TaskDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Camp Data amb botó de calendari
-                OutlinedTextField(
-                    value = dueDate,
-                    onValueChange = { dueDate = it },
-                    label = { Text("Data límit (YYYY-MM-DD)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    // Afegim la icona a la dreta (trailingIcon)
-                    trailingIcon = {
-                        IconButton(onClick = { showDatePicker = true }) {
-                            Icon(
-                                imageVector = Icons.Default.DateRange,
-                                contentDescription = "Seleccionar data"
-                            )
+                Box {
+                    OutlinedTextField(
+                        value = dueDate,
+                        onValueChange = { }, // No permetem escriure manualment
+                        label = { Text("Data límit (YYYY-MM-DD)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = true, // Fem que sigui de només lectura
+                        // Afegim la icona a la dreta (trailingIcon)
+                        trailingIcon = {
+                            IconButton(onClick = { showDatePicker = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.DateRange,
+                                    contentDescription = "Seleccionar data"
+                                )
+                            }
                         }
+                    )
+                    // Superposició transparent per detectar clics a tot el camp
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable { showDatePicker = true }
+                    )
+                }
+
+
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Selector de Prioritat
+                Text("Prioritat", style = MaterialTheme.typography.bodyMedium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    TaskPriority.values().forEach { p ->
+                        FilterChip(
+                            selected = priority == p,
+                            onClick = { priority = p },
+                            label = { Text(p.name) },
+                            leadingIcon = if (priority == p) {
+                                { Icon(Icons.Default.Check, contentDescription = null) }
+                            } else null
+                        )
                     }
-                )
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -440,7 +554,7 @@ fun TaskDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
-                        onClick = { onConfirm(title, subject, dueDate) },
+                        onClick = { onConfirm(title, subject, dueDate, priority) },
                         enabled = isTitleValid
                     ) {
                         Text("Desar")
@@ -451,8 +565,99 @@ fun TaskDialog(
     }
 }
 
+// Funció per generar un color consistent a partir del nom de l'assignatura
+fun getSubjectColor(subject: String): Color {
+    val hash = subject.hashCode()
+    val hue = (hash % 360).absoluteValue.toFloat()
+    val saturation = 0.6f // Colors pastís
+    val lightness = 0.8f
+    return Color(ColorUtils.HSLToColor(floatArrayOf(hue, saturation, lightness)))
+}
+
 // Funció auxiliar per formatar la data
 fun convertMillisToDate(millis: Long): String {
     val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
     return formatter.format(Date(millis))
+}
+
+@Composable
+fun SettingsDialog(
+    username: String,
+    isDarkTheme: Boolean,
+    onThemeChange: () -> Unit,
+    onLogout: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Ajustes",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Divider()
+
+                // Perfil
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Perfil:",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = username,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
+
+                // Tema
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Mode Fosc",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Switch(
+                        checked = isDarkTheme,
+                        onCheckedChange = { onThemeChange() }
+                    )
+                }
+
+                Divider()
+
+                // Logout
+                Button(
+                    onClick = onLogout,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Tancar Sessió")
+                }
+                
+                TextButton(onClick = onDismiss) {
+                    Text("Tancar")
+                }
+            }
+        }
+    }
 }
